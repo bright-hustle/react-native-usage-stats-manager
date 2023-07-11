@@ -1,18 +1,40 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 import * as React from 'react';
 
 import { StyleSheet, View, Text } from 'react-native';
-import { multiply } from 'react-native-usage-stats-manager';
+import {
+  EventFrequency,
+  checkForPermission,
+  queryUsageStats,
+  showUsageAccessSettings,
+} from 'react-native-usage-stats-manager';
 
 export default function App() {
-  const [result, setResult] = React.useState<number | undefined>();
+  // const [result, setRes ult] = React.useState<any | undefined>('test');
+  const startDateString = '2023-06-11T12:34:56';
+  const endDateString = '2023-07-11T12:34:56';
 
+  const startMilliseconds = new Date(startDateString).getTime();
+  const endMilliseconds = new Date(endDateString).getTime();
   React.useEffect(() => {
-    multiply(3, 7).then(setResult);
+    checkForPermission().then((res: any) => {
+      console.log('permission ::', res);
+      if (!res) {
+        showUsageAccessSettings('');
+      }
+    });
+    queryUsageStats(
+      EventFrequency.INTERVAL_DAILY,
+      startMilliseconds,
+      endMilliseconds
+    ).then((res: any) => {
+      console.log(res);
+    });
   }, []);
 
   return (
     <View style={styles.container}>
-      <Text>Result: {result}</Text>
+      <Text>Result: </Text>
     </View>
   );
 }

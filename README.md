@@ -1,21 +1,64 @@
-# react-native-usage-stats-manager
+# @evilratt/react-native-usage-stats-manager
 
 Usage Stats Manager Plugin
 
 ## Installation
 
 ```sh
-npm install react-native-usage-stats-manager
+npm install @evilratt/react-native-usage-stats-manager
+```
+
+## Android
+
+Permission need to be added on AndroidManifest.xml
+
+```xml
+
+<uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
+
+```
+
+If Build Error on kotlin add kotlinVersion to the gradle.properties
+
+```xml
+
+kotlinVersion=1.8.10
+
 ```
 
 ## Usage
 
 ```js
-import { multiply } from 'react-native-usage-stats-manager';
+import {
+  EventFrequency,
+  checkForPermission,
+  queryUsageStats,
+  showUsageAccessSettings,
+} from '@evilratt/react-native-usage-stats-manager';
 
-// ...
+Time needs to be in millisecond for function queryUsageStats
 
-const result = await multiply(3, 7);
+const startDateString = '2023-06-11T12:34:56';
+const endDateString = '2023-07-11T12:34:56';
+
+const startMilliseconds = new Date(startDateString).getTime();
+const endMilliseconds = new Date(endDateString).getTime();
+
+const result = await queryUsageStats(
+      EventFrequency.INTERVAL_DAILY,
+      startMilliseconds,
+      endMilliseconds
+    )
+```
+
+## Check Permission & Open Permission Activity
+
+```js
+checkForPermission().then((res: any) => {
+  if (!res) {
+    showUsageAccessSettings('');
+  }
+});
 ```
 
 ## Contributing
