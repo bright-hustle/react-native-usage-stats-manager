@@ -15,17 +15,19 @@ import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.Uri
 import android.os.Build
-import android.os.Process;
+import android.os.Process
 import android.os.RemoteException
 import android.util.Log
 import androidx.annotation.RequiresApi
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
+import com.facebook.react.bridge.ReactContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.bridge.WritableNativeMap
 import com.facebook.react.common.MapBuilder
+
 
 class UsageStatsManagerModule(reactContext: ReactApplicationContext) :
   ReactContextBaseJavaModule(reactContext) {
@@ -94,11 +96,25 @@ class UsageStatsManagerModule(reactContext: ReactApplicationContext) :
           usageStats.putDouble("lastTimeStamp", us.lastTimeStamp.toDouble())
           usageStats.putDouble("lastTimeUsed", us.lastTimeUsed.toDouble())
           usageStats.putInt("describeContents", us.describeContents())
-          result.putMap(us.getPackageName(), usageStats)
+          usageStats.putString("appName", getAppNameFromPackage(us.packageName, reactContext!!))
+          result.putMap(us.packageName, usageStats)
         }
       }
     }
     promise.resolve(result)
+  }
+
+  private fun getAppNameFromPackage(packageName: String, context: ReactContext): String? {
+    val mainIntent = Intent(Intent.ACTION_MAIN, null)
+    mainIntent.addCategory(Intent.CATEGORY_LAUNCHER)
+    val pkgAppsList = context.packageManager
+      .queryIntentActivities(mainIntent, 0)
+    for (app in pkgAppsList) {
+      if (app.activityInfo.packageName == packageName) {
+        return app.activityInfo.loadLabel(context.packageManager).toString()
+      }
+    }
+    return null
   }
 
   @ReactMethod

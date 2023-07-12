@@ -1,11 +1,11 @@
-# @evilratt/react-native-usage-stats-manager
+# @brighthustle/react-native-usage-stats-manager
 
 Usage Stats Manager Plugin
 
 ## Installation
 
 ```sh
-npm install @evilratt/react-native-usage-stats-manager
+npm install @brighthustle/react-native-usage-stats-manager
 ```
 
 ## Android
@@ -34,7 +34,7 @@ import {
   checkForPermission,
   queryUsageStats,
   showUsageAccessSettings,
-} from '@evilratt/react-native-usage-stats-manager';
+} from '@brighthustle/react-native-usage-stats-manager';
 
 Time needs to be in millisecond for function queryUsageStats
 
