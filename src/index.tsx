@@ -25,6 +25,25 @@ export function queryUsageStats(
   return UsageStatsManager.queryUsageStats(interval, startTime, endTime);
 }
 
+export function queryAndAggregateUsageStats(
+  startTime: number,
+  endTime: number
+): Promise<any> {
+  return UsageStatsManager.queryAndAggregateUsageStats(startTime, endTime);
+}
+
+export function queryEvents(startTime: number, endTime: number): Promise<any> {
+  return UsageStatsManager.queryEvents(startTime, endTime);
+}
+
+export function queryEventsStats(
+  interval: number,
+  startTime: number,
+  endTime: number
+): Promise<any> {
+  return UsageStatsManager.queryEventsStats(interval, startTime, endTime);
+}
+
 export function showUsageAccessSettings(packageName: string) {
   return UsageStatsManager.showUsageAccessSettings(packageName);
 }
