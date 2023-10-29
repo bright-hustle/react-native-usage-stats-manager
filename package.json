@@ -1,6 +1,6 @@
 {
   "name": "@brighthustle/react-native-usage-stats-manager",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Usage Stats Manager Plugin",
   "main": "lib/commonjs/index",
   "module": "lib/module/index",
