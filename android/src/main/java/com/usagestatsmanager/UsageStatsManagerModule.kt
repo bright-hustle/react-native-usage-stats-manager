@@ -15,35 +15,43 @@ import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
+import android.net.TrafficStats
 import android.net.Uri
 import android.os.Build
 import android.os.Process
 import android.os.RemoteException
-import android.util.Log
-import android.widget.ArrayAdapter
+import android.text.TextUtils
 import androidx.annotation.RequiresApi
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
-import com.facebook.react.bridge.ReactContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.bridge.WritableNativeMap
 import com.facebook.react.common.MapBuilder
+import com.usagestatsmanager.model.AppData
+import com.usagestatsmanager.utils.SortOrder
+import com.usagestatsmanager.utils.UsageUtils
+import com.usagestatsmanager.utils.UsageUtils.getAppUid
+import com.usagestatsmanager.utils.UsageUtils.getTimeRange
+import com.usagestatsmanager.utils.UsageUtils.humanReadableMillis
+import com.usagestatsmanager.utils.UsageUtils.isSystemApp
+import com.usagestatsmanager.utils.UsageUtils.parsePackageName
 
 
 class UsageStatsManagerModule(reactContext: ReactApplicationContext) :
-  ReactContextBaseJavaModule(reactContext) {
-  private var reactContext: ReactApplicationContext? = reactContext
+    ReactContextBaseJavaModule(reactContext) {
+  private var reactContext: Context = reactContext
 
   @RequiresApi(Build.VERSION_CODES.M)
-  private var networkStatsManager: NetworkStatsManager? = reactContext.getSystemService(Context.NETWORK_STATS_SERVICE) as NetworkStatsManager
+  private var networkStatsManager: NetworkStatsManager? =
+      reactContext.getSystemService(Context.NETWORK_STATS_SERVICE) as NetworkStatsManager
 
   override fun getName(): String {
     return NAME
   }
 
-  override  fun getConstants(): kotlin.collections.Map<String, Any>? {
+  override fun getConstants(): kotlin.collections.Map<String, Any>? {
     val constants: MutableMap<String, Any> = MapBuilder.newHashMap()
     constants["INTERVAL_WEEKLY"] = UsageStatsManager.INTERVAL_WEEKLY
     constants["INTERVAL_MONTHLY"] = UsageStatsManager.INTERVAL_MONTHLY
@@ -59,12 +67,13 @@ class UsageStatsManagerModule(reactContext: ReactApplicationContext) :
   private fun packageExists(packageName: String): Boolean {
     val packageManager: PackageManager? = reactContext?.getPackageManager()
     var info: ApplicationInfo? = null
-    info = try {
-      packageManager?.getApplicationInfo(packageName, 0)
-    } catch (e: PackageManager.NameNotFoundException) {
-      e.printStackTrace()
-      return false
-    }
+    info =
+        try {
+          packageManager?.getApplicationInfo(packageName, 0)
+        } catch (e: PackageManager.NameNotFoundException) {
+          e.printStackTrace()
+          return false
+        }
     return true
   }
 
@@ -80,42 +89,47 @@ class UsageStatsManagerModule(reactContext: ReactApplicationContext) :
 
   @ReactMethod
   fun queryUsageStats(interval: Int, startTime: Double, endTime: Double, promise: Promise) {
-
+    val packageManager: PackageManager = reactContext!!.packageManager
     val result: WritableMap = WritableNativeMap()
     val usageStatsManager: UsageStatsManager =
-      reactContext?.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-    val time = System.currentTimeMillis()
-    val queryUsageStats: MutableList<UsageStats>? =
-      usageStatsManager.queryUsageStats(interval, startTime.toLong(), endTime.toLong())
-    if (queryUsageStats != null) {
-      for (us in queryUsageStats) {
-        if(us.totalTimeInForeground.toInt() != 0) {
-          Log.d("UsageStats", us.packageName + " = " + us.totalTimeInForeground)
-          val usageStats: WritableMap = WritableNativeMap()
-          usageStats.putString("packageName", us.packageName)
-          val totalTimeInSeconds = us.totalTimeInForeground.toDouble() / 1000
-          usageStats.putDouble("totalTimeInForeground", totalTimeInSeconds)
-          usageStats.putDouble("firstTimeStamp", us.firstTimeStamp.toDouble())
-          usageStats.putDouble("lastTimeStamp", us.lastTimeStamp.toDouble())
-          usageStats.putDouble("lastTimeUsed", us.lastTimeUsed.toDouble())
-          usageStats.putInt("describeContents", us.describeContents())
-          usageStats.putString("appName", getAppNameFromPackage(us.packageName, reactContext!!))
-          result.putMap(us.packageName, usageStats)
-        }
+        reactContext?.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+    val queryUsageStats: List<UsageStats> =
+        usageStatsManager.queryUsageStats(interval, startTime.toLong(), endTime.toLong())
+
+    for (us in queryUsageStats) {
+      if (us.totalTimeInForeground > 0) {
+        val usageStats: WritableMap = WritableNativeMap()
+        usageStats.putString("packageName", us.packageName)
+        val totalTimeInSeconds = us.totalTimeInForeground / 1000
+        usageStats.putDouble("totalTimeInForeground", totalTimeInSeconds.toDouble())
+        usageStats.putDouble("firstTimeStamp", us.firstTimeStamp.toDouble())
+        usageStats.putDouble("lastTimeStamp", us.lastTimeStamp.toDouble())
+        usageStats.putDouble("lastTimeUsed", us.lastTimeUsed.toDouble())
+        usageStats.putBoolean("isSystem", isSystemApp(us.packageName))
+        usageStats.putString(
+            "appName",
+            UsageUtils.parsePackageName(packageManager, us.packageName.toString()).toString()
+        )
+        result.putMap(us.packageName, usageStats)
       }
     }
+
     promise.resolve(result)
   }
 
   @RequiresApi(Build.VERSION_CODES.LOLLIPOP_MR1)
   @ReactMethod
-  fun queryAndAggregateUsageStats( startTime: Double, endTime: Double, promise: Promise) {
+  fun queryAndAggregateUsageStats(startTime: Double, endTime: Double, promise: Promise) {
+    val packageManager: PackageManager = reactContext!!.packageManager
     val result: WritableMap = WritableNativeMap()
-    val usageStatsManager: UsageStatsManager = reactContext?.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-    val queryUsageStats: MutableMap<String, UsageStats>? = usageStatsManager.queryAndAggregateUsageStats(startTime.toLong(), endTime.toLong())
+    val usageStatsManager: UsageStatsManager =
+        reactContext?.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+    val queryUsageStats: MutableMap<String, UsageStats>? =
+        usageStatsManager.queryAndAggregateUsageStats(startTime.toLong(), endTime.toLong())
+
     if (queryUsageStats != null) {
       for (us in queryUsageStats.values) {
-        if(us.totalTimeInForeground.toInt() != 0 ) {
+        if (us.totalTimeInForeground.toInt() != 0) {
           val usageStats: WritableMap = WritableNativeMap()
           usageStats.putString("packageName", us.packageName)
           val totalTimeInSeconds = us.totalTimeInForeground.toDouble() / 1000
@@ -125,7 +139,10 @@ class UsageStatsManagerModule(reactContext: ReactApplicationContext) :
           usageStats.putDouble("lastTimeUsed", us.lastTimeUsed.toDouble())
           usageStats.putInt("describeContents", us.describeContents())
           usageStats.putBoolean("isSystem", isSystemApp(us.packageName.toString()))
-          usageStats.putString("appName", getAppNameFromPackage(us.packageName.toString(), reactContext!!))
+          usageStats.putString(
+              "appName",
+              UsageUtils.parsePackageName(packageManager, us.packageName.toString()).toString()
+          )
           result.putMap(us.packageName, usageStats)
         }
       }
@@ -133,28 +150,151 @@ class UsageStatsManagerModule(reactContext: ReactApplicationContext) :
     promise.resolve(result)
   }
 
+  fun writeToWritableMap(mutableList: MutableList<AppData>): WritableMap {
+    val writableMap: WritableMap = WritableNativeMap()
+
+    for ((index, appData) in mutableList.withIndex()) {
+      val appDataMap: WritableMap =  WritableNativeMap()
+      appDataMap.putString("name", appData.mName)
+      appDataMap.putString("packageName", appData.mPackageName)
+      appDataMap.putDouble("eventTime", appData.mEventTime.toDouble())
+      appDataMap.putDouble("usageTime", appData.mUsageTime.toDouble())
+      appDataMap.putString("humanReadableUsageTime", humanReadableMillis(appData.mUsageTime))
+      appDataMap.putInt("eventType", appData.mEventType)
+      appDataMap.putInt("count", appData.mCount)
+      appDataMap.putBoolean("isSystem", appData.mIsSystem)
+
+      writableMap.putMap(index.toString(), appDataMap)
+    }
+    return writableMap
+  }
 
   @ReactMethod
-  fun queryEvents( startTime: Double, endTime: Double, promise: Promise) {
+  fun queryEvents(startTime: Double, endTime: Double, promise: Promise) {
+//    val result: WritableMap = WritableNativeMap()
+    val items: MutableList<AppData> = mutableListOf<AppData>()
+    val newList: MutableList<AppData> = mutableListOf()
+    val manager: UsageStatsManager =
+        reactContext?.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
 
-    val result: WritableMap = WritableNativeMap()
-    val usageStatsManager: UsageStatsManager =
-      reactContext?.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-    val queryUsageStats: UsageEvents? =
-      usageStatsManager.queryEvents(startTime.toLong(), endTime.toLong())
-    val us = UsageEvents.Event()
-    if (queryUsageStats != null) {
-      while ( queryUsageStats.hasNextEvent() ) {
-        queryUsageStats.getNextEvent( us )
-        Log.e( "APP" , "${us.packageName} ${us.timeStamp}" )
-        val usageStats: WritableMap = WritableNativeMap()
-        usageStats.putString("packageName", us.packageName)
-        usageStats.putString("timestamp", us.timeStamp.toString())
-        result.putMap(us.packageName, usageStats)
+    //      val events: UsageEvents = manager.queryEvents(startTime.toLong(), endTime.toLong())
+    var prevPackage: String? = ""
+    val startPoints: MutableMap<String, Long> = mutableMapOf()
+    val endPoints: MutableMap<String, ClonedEvent> = mutableMapOf()
+
+    val sortEnum: SortOrder = SortOrder.getSortEnum(0)
+    val range = getTimeRange(sortEnum)
+
+//    val events: UsageEvents = if (sortEnum.name.equals("MONTH", ignoreCase = true)) {
+//      manager.queryEvents(UsageStatsManager.INTERVAL_DAILY.toLong(), range[1])
+//    } else {
+//      manager.queryEvents(range[0], range[1])
+//    }
+    val events: UsageEvents = manager.queryEvents(startTime.toLong(), endTime.toLong())
+
+    val event = UsageEvents.Event()
+    while (events.hasNextEvent()) {
+      events.getNextEvent(event);
+
+      val eventType: Int = event.eventType
+      val eventTime: Long = event.timeStamp
+      val eventPackage: String = event.packageName
+
+      if (eventType === UsageEvents.Event.MOVE_TO_FOREGROUND) {
+        var item: AppData? = containItem(items, eventPackage)
+        if (item == null) {
+          item = AppData()
+          item.mPackageName = eventPackage
+          items.add(item)
+        }
+        if (!startPoints.containsKey(eventPackage)) {
+          startPoints.put(eventPackage, eventTime)
+        }
+      }
+
+      if (eventType == UsageEvents.Event.MOVE_TO_BACKGROUND) {
+        if (startPoints.isNotEmpty() && startPoints.containsKey(eventPackage)) {
+          endPoints[eventPackage] = ClonedEvent(event);
+        }
+      }
+
+      if (TextUtils.isEmpty(prevPackage)) prevPackage = eventPackage;
+      if (!prevPackage.equals(eventPackage)) {
+        if (startPoints.containsKey(prevPackage) && endPoints.containsKey(prevPackage)) {
+          val lastEndEvent = endPoints[prevPackage]
+          val listItem = containItem(items, prevPackage!!)
+          if (listItem != null) { // update list item info
+            listItem.mEventTime = lastEndEvent!!.timeStamp
+            var duration = lastEndEvent!!.timeStamp - startPoints[prevPackage]!!
+            if (duration <= 0) duration = 0
+            listItem.mUsageTime += duration
+            if (duration > UsageUtils.USAGE_TIME_MIX) {
+              listItem.mCount++
+            }
+          }
+          startPoints.remove(prevPackage)
+          endPoints.remove(prevPackage)
+        }
+        prevPackage = eventPackage
       }
     }
-    promise.resolve(result)
+
+    if (items.size > 0) {
+      var canCalculateDataUsage: Boolean = false
+
+      var mobileData: MutableMap<String?, Long?> = HashMap()
+      var wifiData: Map<String?, Long?>? = HashMap()
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        canCalculateDataUsage = true
+        val networkStatsManager = reactContext.getSystemService(Context.NETWORK_STATS_SERVICE)
+        val telephonyManager = reactContext.getSystemService(Context.TELEPHONY_SERVICE)
+//          mobileData = getMobileData(context, telephonyManager, networkStatsManager, offset)
+//          wifiData = getWifiUsageData(context, telephonyManager, networkStatsManager, offset)
+      } else {
+        mobileData["mobile"] = TrafficStats.getMobileRxBytes() + TrafficStats.getMobileTxBytes()
+      }
+
+
+      val hideSystem = true
+      val hideUninstall = true
+      val packageManager: PackageManager = reactContext.packageManager
+
+      for (item in items) {
+//        if (!openable(packageManager, item.mPackageName!!)) {
+//          continue
+//        }
+        if (hideSystem && isSystemApp(packageManager, item.mPackageName!!)) {
+          continue
+        }
+//        if (hideUninstall && !isInstalled(packageManager, item.mPackageName!!)) {
+//          continue
+//        }
+        if (canCalculateDataUsage) {
+          val key = "u" + getAppUid(packageManager, item.mPackageName!!)
+//            if (mobileData.size() > 0 && mobileData.containsKey(key)) {
+//              item.mMobile = mobileData.get(key)
+//            }
+//            if (wifiData.size() > 0 && wifiData.containsKey(key)) {
+//              item.mWifi = wifiData.get(key)
+//            }
+        }
+        item.mName = parsePackageName(packageManager, item.mPackageName!!).toString()
+        newList.add(item)
+      }
+
+      newList.sortWith(Comparator { left: AppData, right: AppData -> (right.mUsageTime - left.mUsageTime).toInt() })
+    }
+    promise.resolve(writeToWritableMap(newList))
   }
+
+  private fun containItem(items: List<AppData>, packageName: String): AppData? {
+    for (item in items) {
+      if (item.mPackageName == packageName) return item
+    }
+    return null
+  }
+
+
 
   @RequiresApi(Build.VERSION_CODES.P)
   @ReactMethod
@@ -162,19 +302,18 @@ class UsageStatsManagerModule(reactContext: ReactApplicationContext) :
 
     val result: WritableMap = WritableNativeMap()
     val usageStatsManager: UsageStatsManager =
-      reactContext?.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+        reactContext?.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
     val queryUsageStats: MutableList<EventStats>? =
-      usageStatsManager.queryEventStats(interval, startTime.toLong(), endTime.toLong())
+        usageStatsManager.queryEventStats(interval, startTime.toLong(), endTime.toLong())
     val us = UsageEvents.Event()
     if (queryUsageStats != null) {
       for (us in queryUsageStats) {
-          val usageStats: WritableMap = WritableNativeMap()
-          usageStats.putDouble("firstTimeStamp", us.firstTimeStamp.toDouble())
-          usageStats.putDouble("lastTimeStamp", us.lastTimeStamp.toDouble())
-          usageStats.putDouble("lastTimeUsed", us.totalTime.toDouble())
-          usageStats.putInt("describeContents", us.describeContents())
-          result.putMap(us.eventType.toString(), usageStats)
-
+        val usageStats: WritableMap = WritableNativeMap()
+        usageStats.putDouble("firstTimeStamp", us.firstTimeStamp.toDouble())
+        usageStats.putDouble("lastTimeStamp", us.lastTimeStamp.toDouble())
+        usageStats.putDouble("lastTimeUsed", us.totalTime.toDouble())
+        usageStats.putInt("describeContents", us.describeContents())
+        result.putMap(us.eventType.toString(), usageStats)
       }
     }
     promise.resolve(result)
@@ -185,83 +324,90 @@ class UsageStatsManagerModule(reactContext: ReactApplicationContext) :
     try {
       val packageManager: PackageManager? = reactContext?.packageManager
       val appInfo = packageManager?.getApplicationInfo(packageName, PackageManager.GET_META_DATA)
-      if ( appInfo != null && appInfo.flags == ApplicationInfo.FLAG_SYSTEM ) {
+      if (appInfo != null && appInfo.flags == ApplicationInfo.FLAG_SYSTEM) {
         isSys = true
       }
-      return isSys;
+      return isSys
     } catch (e: PackageManager.NameNotFoundException) {
       e.printStackTrace()
-      return isSys;
+      return isSys
     }
   }
 
-  private fun getAppNameFromPackage(packageName: String, context: ReactApplicationContext): String? {
-//    val packageManager = context.getA
-//    val appInfo = context.getApplicationInfo()
-//    Log.d("UsageStats", appInfo.toString())
-//    if(appInfo != null){
-//
-//      return context.getApplicationLabel(appInfo)?.toString()
-//    }
-
-
+  private fun getAppNameFromPackage(packageName: String, context: Context): String {
+    val packageManager = context.packageManager
+    var p = packageName
 
     try {
-//      val packageManager: PackageManager = context.packageManager
-//      val appInfo = packageManager.getApplicationInfo(packageName, 0)
-//      val packageManagerForApp = context.packageManager.createPackageContext(
-//        packageName,
-//        Context.CONTEXT_IGNORE_SECURITY or Context.CONTEXT_INCLUDE_CODE
-//      ).packageManager
-      val list = context.packageManager.getInstalledPackages(0)
-      var appName: String = "null";
-      for (i in list.indices) {
-        val packageInfo = list[i]
-        if (packageInfo.packageName == packageName) {
-          appName = packageInfo.applicationInfo.loadLabel(context.packageManager).toString()
-          Log.e("App List$i", appName)
+      val mainIntent = Intent(Intent.ACTION_MAIN, null)
+      mainIntent.addCategory(Intent.CATEGORY_LAUNCHER)
+      val packages = packageManager.queryIntentActivities(mainIntent, 0)
 
+      val app_name_list = ArrayList<String>()
+      val app_package_list = ArrayList<String>()
+
+      for (resolveInfo in packages) {
+        try {
+          if (resolveInfo.activityInfo != null) {
+            val res =
+                packageManager.getResourcesForApplication(resolveInfo.activityInfo.applicationInfo)
+
+            val appPackage = resolveInfo.activityInfo.packageName
+            val appName =
+                if (resolveInfo.activityInfo.labelRes != 0) {
+                  res.getString(resolveInfo.activityInfo.labelRes)
+                } else {
+                  resolveInfo.activityInfo.applicationInfo.loadLabel(packageManager).toString()
+                }
+
+            // Check if the package name already exists
+            if (!app_package_list.contains(appPackage)) {
+              app_name_list.add(appName)
+              app_package_list.add(appPackage)
+            }
+          }
+        } catch (e: Exception) {
+          p = e.toString()
         }
       }
-//      return packageManagerForApp.getApplicationLabel(appInfo)?.toString()
-      return  appName.toString();
-    } catch (e: PackageManager.NameNotFoundException) {
-      e.printStackTrace()
-      return null // Or return a default value, e.g., "Unknown"
-    }
 
-//    val mainIntent = Intent(Intent.ACTION_MAIN, null)
-//    mainIntent.addCategory(Intent.CATEGORY_LAUNCHER)
-//    val pkgAppsList = context.packageManager
-//      .queryIntentActivities(mainIntent, 0)
-//    for (app in pkgAppsList) {
-//      if (app.activityInfo.packageName == packageName) {
-//        return app.activityInfo.loadLabel(context.packageManager).toString()
-//      }
-//    }
-//    return appInfo.toString();
+      // Search for the app name in the list
+      val index = app_package_list.indexOf(packageName)
+      if (index >= 0 && index < app_name_list.size) {
+        return app_name_list[index]
+      }
+    } catch (e: PackageManager.NameNotFoundException) {
+      p = e.toString()
+    }
+    return p
   }
 
   @ReactMethod
   fun checkForPermission(promise: Promise) {
-    val appOps: AppOpsManager = reactContext?.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
+    val appOps: AppOpsManager =
+        reactContext?.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
     val mode: Int =
-      appOps.checkOpNoThrow(OPSTR_GET_USAGE_STATS, Process.myUid(), reactContext?.getPackageName()!!)
+        appOps.checkOpNoThrow(
+            OPSTR_GET_USAGE_STATS,
+            Process.myUid(),
+            reactContext?.getPackageName()!!
+        )
     promise.resolve(mode == MODE_ALLOWED)
   }
 
   @TargetApi(Build.VERSION_CODES.M)
   private fun getDataUsage(
-    networkType: Int,
-    subscriberId: String?,
-    packageUid: Int,
-    startTime: Long,
-    endTime: Long
+      networkType: Int,
+      subscriberId: String?,
+      packageUid: Int,
+      startTime: Long,
+      endTime: Long
   ): Double {
     val networkStatsByApp: NetworkStats
     var currentDataUsage = 0.0
     try {
-      networkStatsByApp = networkStatsManager?.querySummary(networkType, subscriberId, startTime, endTime)!!
+      networkStatsByApp =
+          networkStatsManager?.querySummary(networkType, subscriberId, startTime, endTime)!!
       do {
         val bucket: NetworkStats.Bucket = NetworkStats.Bucket()
         networkStatsByApp.getNextBucket(bucket)
@@ -276,17 +422,45 @@ class UsageStatsManagerModule(reactContext: ReactApplicationContext) :
   }
 
   @ReactMethod
-  fun getAppDataUsage(packageName: String, networkType: Int, startTime: Double, endTime: Double, promise: Promise) {
+  fun getAppDataUsage(
+      packageName: String,
+      networkType: Int,
+      startTime: Double,
+      endTime: Double,
+      promise: Promise
+  ) {
     // get sim card
     val uid = getAppUid(packageName)
     if (networkType == ConnectivityManager.TYPE_MOBILE) {
-      promise.resolve(getDataUsage(ConnectivityManager.TYPE_MOBILE, null, uid, startTime.toLong(), endTime.toLong()))
+      promise.resolve(
+          getDataUsage(
+              ConnectivityManager.TYPE_MOBILE,
+              null,
+              uid,
+              startTime.toLong(),
+              endTime.toLong()
+          )
+      )
     } else if (networkType == ConnectivityManager.TYPE_WIFI) {
-      promise.resolve(getDataUsage(ConnectivityManager.TYPE_WIFI, "", uid, startTime.toLong(), endTime.toLong()))
+      promise.resolve(
+          getDataUsage(ConnectivityManager.TYPE_WIFI, "", uid, startTime.toLong(), endTime.toLong())
+      )
     } else {
       promise.resolve(
-        getDataUsage(ConnectivityManager.TYPE_MOBILE, "", uid, startTime.toLong(), endTime.toLong())
-          + getDataUsage(ConnectivityManager.TYPE_WIFI, "", uid, startTime.toLong(), endTime.toLong())
+          getDataUsage(
+              ConnectivityManager.TYPE_MOBILE,
+              "",
+              uid,
+              startTime.toLong(),
+              endTime.toLong()
+          ) +
+              getDataUsage(
+                  ConnectivityManager.TYPE_WIFI,
+                  "",
+                  uid,
+                  startTime.toLong(),
+                  endTime.toLong()
+              )
       )
     }
   }
@@ -309,5 +483,19 @@ class UsageStatsManagerModule(reactContext: ReactApplicationContext) :
 
   companion object {
     const val NAME = "UsageStatsManager"
+  }
+}
+
+internal class ClonedEvent(event: UsageEvents.Event) {
+  var packageName: String
+  var eventClass: String
+  var timeStamp: Long
+  var eventType: Int
+
+  init {
+    packageName = event.packageName
+    eventClass = event.className
+    timeStamp = event.timeStamp
+    eventType = event.eventType
   }
 }

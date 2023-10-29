@@ -1,3 +1,4 @@
+/* eslint-disable react-native/no-inline-styles */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable react-hooks/exhaustive-deps */
 import * as React from 'react';
@@ -6,10 +7,8 @@ import { StyleSheet, Text, View, processColor } from 'react-native';
 import {
   EventFrequency,
   checkForPermission,
-  queryAndAggregateUsageStats,
   queryEvents,
   queryEventsStats,
-  queryUsageStats,
   showUsageAccessSettings,
 } from 'react-native-usage-stats-manager';
 import moment from 'moment';
@@ -80,6 +79,22 @@ export default function App() {
     return `${hours} hr : ${minutes} min`;
   };
 
+  function humanReadableMillis(milliSeconds: any) {
+    const seconds = Math.floor(milliSeconds / 1000);
+    if (seconds < 60) {
+      return `${seconds}s`;
+    } else if (seconds < 3600) {
+      const minutes = Math.floor(seconds / 60);
+      const remainingSeconds = seconds % 60;
+      return `${minutes}m ${remainingSeconds}s`;
+    } else {
+      const hours = Math.floor(seconds / 3600);
+      const minutes = Math.floor((seconds % 3600) / 60);
+      const remainingSeconds = seconds % 60;
+      return `${hours}h ${minutes}m ${remainingSeconds}s`;
+    }
+  }
+
   const handleSelect = (event: any) => {
     // let entry = event.nativeEvent;
     // if (entry == null) {
@@ -97,69 +112,47 @@ export default function App() {
         showUsageAccessSettings('');
       }
     });
-    // queryEvents(startMilliseconds, endMilliseconds).then((da: any) => {
-    //   console.log('query events ::', da);
-    // });
-    queryEventsStats(
-      EventFrequency.INTERVAL_BEST,
-      startMilliseconds,
-      endMilliseconds
-    ).then((da: any) => {
-      console.log('query events ::', da);
-    });
-    queryAndAggregateUsageStats(startMilliseconds, endMilliseconds).then(
-      (res: any) => {
-        console.log(res);
-        const value: any = Object.entries(res).sort(
-          ([, a]: any, [, b]: any) =>
-            b.totalTimeInForeground - a.totalTimeInForeground
-        );
-        let dataTempArr: any = [];
+    queryEvents(startMilliseconds, endMilliseconds).then((res: any) => {
+      let dataTempArr: any = [];
 
-        for (let i = 0; i < 4; i++) {
-          const dataTemp = {
-            value: value[i][1].totalTimeInForeground,
-            label: value[i][1].appName
-              ? value[i][1].appName
-              : value[i][1].packageName,
-          };
-          dataTempArr.push(dataTemp);
-        }
-        const dataArr = dataTempArr.reduce(
-          (a: any, b: any) => a + b.population,
-          0
-        );
-        let dataTempPie: any = {
-          data: {
-            dataSets: [
-              {
-                values: dataTempArr,
-                config: {
-                  colors: [
-                    processColor(COLORS.BUTTONCOLOR1),
-                    processColor(COLORS.ORANGE_COLOR),
-                    processColor(COLORS.GREEN_COLOR),
-                    processColor(COLORS.RED_COLOR),
-                    processColor(COLORS.TEAL_COLOR),
-                  ],
-                  valueTextSize: 15,
-                  valueTextColor: processColor('white'),
-                  sliceSpace: 5,
-                  selectionShift: 13,
-                  // xValuePositio: "OUTSIDE_SLICE",
-                  // yValuePosition: "OUTSIDE_SLICE",
-                  valueFormatter: "#'%'",
-                  valueLineColor: processColor('green'),
-                  valueLinePart1Length: 0.5,
-                },
-              },
-            ],
-          },
+      for (let i = 0; i < 4; i++) {
+        console.log('data ::', res[i]);
+        const dataTemp = {
+          value: res[i].usageTime,
+          label: res[i].name ? res[i].name : res[i].packageName,
         };
-        setDataNew(dataTempPie);
-        setDataView(dataTempArr);
+        dataTempArr.push(dataTemp);
       }
-    );
+      let dataTempPie: any = {
+        data: {
+          dataSets: [
+            {
+              values: dataTempArr,
+              config: {
+                colors: [
+                  processColor(COLORS.BUTTONCOLOR1),
+                  processColor(COLORS.ORANGE_COLOR),
+                  processColor(COLORS.GREEN_COLOR),
+                  processColor(COLORS.RED_COLOR),
+                  processColor(COLORS.TEAL_COLOR),
+                ],
+                valueTextSize: 15,
+                valueTextColor: processColor('white'),
+                sliceSpace: 5,
+                selectionShift: 13,
+                // xValuePositio: "OUTSIDE_SLICE",
+                // yValuePosition: "OUTSIDE_SLICE",
+                valueFormatter: "#'%'",
+                valueLineColor: processColor('green'),
+                valueLinePart1Length: 0.5,
+              },
+            },
+          ],
+        },
+      };
+      setDataNew(dataTempPie);
+      setDataView(dataTempArr);
+    });
   }, []);
 
   return (
@@ -201,7 +194,7 @@ export default function App() {
             key={data.label}
           >
             <Text>{data.label}</Text>
-            <Text>{getHours(data.value)}</Text>
+            <Text>{humanReadableMillis(data.value)}</Text>
           </View>
         );
       })}

@@ -1,19 +1,14 @@
-#import "UsageStatsManager.h"
+#import <React/RCTBridgeModule.h>
 
-@implementation UsageStatsManager
-RCT_EXPORT_MODULE()
+@interface RCT_EXTERN_MODULE(UsageStatsManager, NSObject)
 
-// Example method
-// See // https://reactnative.dev/docs/native-modules-ios
-RCT_REMAP_METHOD(multiply,
-                 multiplyWithA:(double)a withB:(double)b
+RCT_EXTERN_METHOD(multiply:(float)a withB:(float)b
                  withResolver:(RCTPromiseResolveBlock)resolve
                  withRejecter:(RCTPromiseRejectBlock)reject)
+
++ (BOOL)requiresMainQueueSetup
 {
-    NSNumber *result = @(a * b);
-
-    resolve(result);
+  return NO;
 }
-
 
 @end

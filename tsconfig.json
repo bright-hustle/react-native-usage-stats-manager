@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "baseUrl": "./",
+    "rootDir": ".",
     "paths": {
       "react-native-usage-stats-manager": ["./src/index"]
     },
